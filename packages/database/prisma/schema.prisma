@@ -1,0 +1,885 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  OWNER
+  MANAGER
+  WAITER
+  BARTENDER
+  CASHIER
+  KITCHEN
+}
+
+enum CheckStatus {
+  OPEN
+  CLOSED
+  PAID
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  HELD
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  VOUCHER
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum OrderPolicy {
+  PRE_PAYMENT
+  POST_PAYMENT
+  HYBRID
+}
+
+enum CashRegisterStatus {
+  OPEN
+  CLOSED
+  SUSPENDED
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  LOSS
+  TRANSFER
+}
+
+enum FiscalNoteStatus {
+  PENDING
+  PROCESSING
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+  ERROR
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  BLOCKED
+}
+
+enum AlertType {
+  LOW_STOCK
+  ORDER_DELAYED
+  CASH_REGISTER_OPEN
+  SYSTEM
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum NotificationType {
+  ORDER_READY
+  ORDER_NEW
+  TABLE_REQUEST
+  PAYMENT_CONFIRMED
+  STOCK_LOW
+  SYSTEM
+}
+
+enum ConsentType {
+  MARKETING_WHATSAPP
+  MARKETING_EMAIL
+  MARKETING_SMS
+  DATA_PROCESSING
+}
+
+enum WhatsAppSessionState {
+  GREETING
+  BROWSING_MENU
+  BUILDING_ORDER
+  AWAITING_PAYMENT
+  ORDER_CONFIRMED
+  FEEDBACK
+  IDLE
+  ENDED
+}
+
+// ============================================================================
+// MODELS — Organization & Unit
+// ============================================================================
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  units Unit[]
+}
+
+model Unit {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  timezone       String @default("America/Sao_Paulo")
+
+  // Fiscal fields (PRD-01 / PRD-06)
+  cnpj              String? // 14 digits, unformatted
+  stateRegistration String? // IE — Inscrição Estadual
+  legalName         String? // Razão social
+  streetAddress     String?
+  addressNumber     String?
+  addressComplement String?
+  neighborhood      String?
+  city              String?
+  state             String? // UF, 2 chars
+  zipCode           String? // 8 digits
+  ibgeCode          String? // 7 digits — required for NFC-e
+
+  // Operational fields (PRD-01)
+  orderPolicy        OrderPolicy @default(POST_PAYMENT)
+  serviceFeeRate     Decimal?    @db.Decimal(5, 4) // e.g., 0.1000 = 10%
+  tipSuggestions     String?     // JSON array, e.g. "[10, 12, 15]"
+  operatingHoursStart String?    // HH:mm
+  operatingHoursEnd   String?    // HH:mm
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  employees      Employee[]
+  customers      Customer[]
+  tables         Table[]
+  zones          Zone[]
+  layouts        Layout[]
+  categories     Category[]
+  products       Product[]
+  checks         Check[]
+  cashRegisters  CashRegister[]
+  stockItems     StockItem[]
+  fiscalNotes    FiscalNote[]
+  priceSchedules PriceSchedule[]
+  dailyReports   DailyReport[]
+  alerts         Alert[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@unique([organizationId, slug])
+}
+
+// ============================================================================
+// MODELS — People
+// ============================================================================
+
+model Employee {
+  id     String @id @default(cuid())
+  unitId String
+  name   String
+  role   Role
+  pin    String // 4-digit PIN for auth
+
+  // Extended fields (PRD-01)
+  cpf          String?   // 11 digits
+  email        String?
+  phone        String?
+  isActive     Boolean   @default(true)
+  hiredAt      DateTime?
+  terminatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit                    Unit                    @relation(fields: [unitId], references: [id])
+  checks                  Check[]
+  orders                  Order[]
+  payments                Payment[]
+  cancellations           Cancellation[]
+  cashRegisters           CashRegister[]
+  cashRegisterOperations  CashRegisterOperation[]
+  stockMovements          StockMovement[]
+  auditLogs               AuditLog[]
+  notifications           Notification[]
+  employeeStats           EmployeeStats[]
+
+  @@unique([unitId, pin])
+  @@index([unitId, isActive])
+}
+
+model Customer {
+  id         String    @id @default(cuid())
+  unitId     String
+  phone      String?
+  phoneHash  String?   // Hashed phone for LGPD
+  name       String?
+  email      String?
+  totalVisits Int      @default(0)
+  lastVisitAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit              Unit               @relation(fields: [unitId], references: [id])
+  consents          CustomerConsent[]
+  whatsappSessions  WhatsAppSession[]
+  checks            Check[]
+
+  @@index([unitId, phoneHash])
+}
+
+model CustomerConsent {
+  id         String      @id @default(cuid())
+  customerId String
+  type       ConsentType
+  granted    Boolean
+  grantedAt  DateTime?
+  revokedAt  DateTime?
+  ipAddress  String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId, type])
+}
+
+model WhatsAppSession {
+  id            String                @id @default(cuid())
+  customerId    String
+  unitId        String
+  state         WhatsAppSessionState  @default(GREETING)
+  context       Json?
+  checkId       String?
+  lastMessageAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id])
+  check    Check?   @relation(fields: [checkId], references: [id])
+
+  @@index([customerId, state])
+}
+
+// ============================================================================
+// MODELS — Physical Space
+// ============================================================================
+
+model Zone {
+  id        String @id @default(cuid())
+  unitId    String
+  name      String
+  floor     Int    @default(0)
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  unit   Unit    @relation(fields: [unitId], references: [id])
+  tables Table[]
+
+  @@index([unitId])
+}
+
+model Layout {
+  id       String  @id @default(cuid())
+  unitId   String
+  name     String
+  svgData  String? @db.Text
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId])
+}
+
+model Table {
+  id     String      @id @default(cuid())
+  unitId String
+  zoneId String?
+  number Int
+  seats  Int         @default(4)
+  status TableStatus @default(AVAILABLE)
+  label  String?
+  posX   Float?
+  posY   Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit   Unit    @relation(fields: [unitId], references: [id])
+  zone   Zone?   @relation(fields: [zoneId], references: [id])
+  checks Check[]
+
+  @@unique([unitId, number])
+}
+
+// ============================================================================
+// MODELS — Menu & Products
+// ============================================================================
+
+model Category {
+  id       String  @id @default(cuid())
+  unitId   String
+  name     String
+  sortOrder Int    @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit     Unit      @relation(fields: [unitId], references: [id])
+  products Product[]
+
+  @@index([unitId, isActive])
+}
+
+model Product {
+  id          String  @id @default(cuid())
+  unitId      String
+  categoryId  String
+  name        String
+  description String?
+  price       Decimal @db.Decimal(10, 2)
+
+  // Extended fields (PRD-01)
+  isAvailable     Boolean @default(true)
+  sortOrder       Int     @default(0)
+  tags            String? // JSON array, e.g. '["vegan", "gluten-free"]'
+  imageUrl        String?
+  preparationTime Int?    // Minutes
+  station         String? // BAR, KITCHEN, GRILL, DESSERT
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit           Unit                @relation(fields: [unitId], references: [id])
+  category       Category            @relation(fields: [categoryId], references: [id])
+  orderItems     OrderItem[]
+  modifierGroups ModifierGroup[]
+  ingredients    ProductIngredient[]
+  priceSchedules PriceSchedule[]
+
+  @@index([unitId, categoryId, isAvailable])
+}
+
+model ModifierGroup {
+  id        String @id @default(cuid())
+  productId String
+  name      String
+  min       Int    @default(0)
+  max       Int    @default(1)
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  product   Product    @relation(fields: [productId], references: [id])
+  modifiers Modifier[]
+
+  @@index([productId])
+}
+
+model Modifier {
+  id              String  @id @default(cuid())
+  modifierGroupId String
+  name            String
+  price           Decimal @db.Decimal(10, 2) @default(0)
+  isAvailable     Boolean @default(true)
+  sortOrder       Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  modifierGroup ModifierGroup @relation(fields: [modifierGroupId], references: [id])
+
+  @@index([modifierGroupId])
+}
+
+// ============================================================================
+// MODELS — Checks, Orders, Payments
+// ============================================================================
+
+model Check {
+  id         String      @id @default(cuid())
+  unitId     String
+  tableId    String?
+  customerId String?
+  employeeId String
+  status     CheckStatus @default(OPEN)
+  totalAmount Decimal?   @db.Decimal(10, 2)
+
+  // Extended fields (PRD-01)
+  serviceFeeAmount Decimal? @db.Decimal(10, 2)
+  tipAmount        Decimal? @db.Decimal(10, 2)
+  discountAmount   Decimal? @db.Decimal(10, 2)
+  discountReason   String?
+
+  // Split/merge (PRD-01)
+  splitParentId String?
+  mergedIntoId  String?
+
+  openedAt  DateTime  @default(now())
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  unit            Unit              @relation(fields: [unitId], references: [id])
+  table           Table?            @relation(fields: [tableId], references: [id])
+  customer        Customer?         @relation(fields: [customerId], references: [id])
+  employee        Employee          @relation(fields: [employeeId], references: [id])
+  splitParent     Check?            @relation("CheckSplits", fields: [splitParentId], references: [id])
+  splitChildren   Check[]           @relation("CheckSplits")
+  mergedInto      Check?            @relation("CheckMerges", fields: [mergedIntoId], references: [id])
+  mergedFrom      Check[]           @relation("CheckMerges")
+  orders          Order[]
+  payments        Payment[]
+  cancellations   Cancellation[]
+  fiscalNotes     FiscalNote[]
+  floatingAccount FloatingAccount?
+  whatsappSessions WhatsAppSession[]
+
+  @@index([unitId, status])
+  @@index([tableId, status])
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  checkId    String
+  employeeId String?
+  status     OrderStatus @default(PENDING)
+
+  // Extended fields (PRD-01)
+  orderNumber Int?    // Sequential per unit per day — set by application logic
+  courseType   String? // STARTER, MAIN, DESSERT, DRINK
+  holdUntil    DateTime?
+  deliveredAt  DateTime?
+  deliveredBy  String?
+  notifiedAt   DateTime?
+  source       String? // WEB_MENU, WHATSAPP, WAITER, POS
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  check    Check      @relation(fields: [checkId], references: [id])
+  employee Employee?  @relation(fields: [employeeId], references: [id])
+  items    OrderItem[]
+
+  @@index([checkId, status])
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  productId  String
+  quantity   Int     @default(1)
+  unitPrice  Decimal @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(10, 2)
+  notes      String?
+  modifiers  Json?   // Selected modifier details
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  checkId    String
+  employeeId String?
+  method     PaymentMethod
+  amount     Decimal       @db.Decimal(10, 2)
+
+  // Extended fields (PRD-01)
+  status          PaymentStatus @default(PENDING)
+  externalId      String?       // Gateway transaction ID (Pagar.me)
+  pixQrCode       String?       // PIX QR payload
+  pixQrCodeBase64 String?       @db.Text // QR code image in base64
+  paymentUrl      String?       // Card payment link
+  expiresAt       DateTime?     // Link/QR expiration
+  paidAt          DateTime?     // Effective payment confirmation
+  cashRegisterId  String?       // FK to CashRegister
+  metadata        Json?         // Gateway-specific data
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  check        Check         @relation(fields: [checkId], references: [id])
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
+  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
+
+  @@index([checkId, status])
+  @@index([externalId])
+}
+
+model Cancellation {
+  id          String   @id @default(cuid())
+  checkId     String?
+  orderId     String?
+  orderItemId String?
+  employeeId  String
+  reason      String
+  amount      Decimal? @db.Decimal(10, 2)
+
+  // Extended fields (PRD-01)
+  authorizedBy String?   // Manager/owner ID for dual approval
+  authorizedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  check    Check?   @relation(fields: [checkId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([checkId])
+}
+
+// ============================================================================
+// MODELS — Cash Register (NEW — PRD-01)
+// ============================================================================
+
+model CashRegister {
+  id         String             @id @default(cuid())
+  unitId     String
+  employeeId String?
+  type       String             @default("OPERATOR") // OPERATOR | DIGITAL
+  status     CashRegisterStatus @default(OPEN)
+
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  openingBalance Decimal   @db.Decimal(10, 2) @default(0)
+  closingBalance Decimal?  @db.Decimal(10, 2)
+  expectedBalance Decimal? @db.Decimal(10, 2)
+  difference     Decimal?  @db.Decimal(10, 2)
+  closingNotes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit       Unit                    @relation(fields: [unitId], references: [id])
+  employee   Employee?               @relation(fields: [employeeId], references: [id])
+  payments   Payment[]
+  operations CashRegisterOperation[]
+
+  @@index([unitId, status])
+}
+
+model CashRegisterOperation {
+  id             String  @id @default(cuid())
+  cashRegisterId String
+  type           String  // WITHDRAWAL | SUPPLY | ADJUSTMENT
+  amount         Decimal @db.Decimal(10, 2)
+  reason         String
+  employeeId     String
+  authorizedBy   String? // Manager/owner ID
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id])
+  employee     Employee     @relation(fields: [employeeId], references: [id])
+
+  @@index([cashRegisterId])
+}
+
+// ============================================================================
+// MODELS — Stock (NEW — PRD-01)
+// ============================================================================
+
+model StockItem {
+  id       String  @id @default(cuid())
+  unitId   String
+  name     String
+  sku      String?
+  quantity Decimal @db.Decimal(10, 3) @default(0)
+  unitType String  // UN, KG, L, ML, G, DOSE
+  minQuantity Decimal? @db.Decimal(10, 3)
+  costPrice   Decimal? @db.Decimal(10, 2)
+  supplierId  String?
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit        Unit                @relation(fields: [unitId], references: [id])
+  movements   StockMovement[]
+  ingredients ProductIngredient[]
+
+  @@unique([unitId, sku])
+  @@index([unitId, isActive])
+}
+
+model StockMovement {
+  id          String       @id @default(cuid())
+  stockItemId String
+  type        MovementType
+  quantity    Decimal      @db.Decimal(10, 3)
+  reason      String?
+  reference   String?      // orderId, purchaseId, etc.
+  employeeId  String?
+  costPrice   Decimal?     @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  stockItem StockItem @relation(fields: [stockItemId], references: [id])
+  employee  Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([stockItemId, createdAt])
+}
+
+model ProductIngredient {
+  id          String  @id @default(cuid())
+  productId   String
+  stockItemId String
+  quantity    Decimal @db.Decimal(10, 3) // Quantity consumed per unit sold
+
+  // Relations
+  product   Product   @relation(fields: [productId], references: [id])
+  stockItem StockItem @relation(fields: [stockItemId], references: [id])
+
+  @@unique([productId, stockItemId])
+}
+
+// ============================================================================
+// MODELS — Fiscal (NEW — PRD-01)
+// ============================================================================
+
+model FiscalNote {
+  id          String           @id @default(cuid())
+  unitId      String
+  checkId     String
+  externalRef String           // FocusNFe reference
+  status      FiscalNoteStatus @default(PENDING)
+  type        String           @default("NFCE") // NFCE | NFE
+  number      String?
+  series      String?
+  accessKey   String?          // 44-digit SEFAZ key
+  xml         String?          @db.Text
+  danfeUrl    String?
+  totalAmount Decimal          @db.Decimal(10, 2)
+  customerCpf String?
+  errorMessage String?
+  issuedAt     DateTime?
+  cancelledAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  unit  Unit  @relation(fields: [unitId], references: [id])
+  check Check @relation(fields: [checkId], references: [id])
+
+  @@unique([unitId, externalRef])
+  @@index([unitId, status])
+}
+
+// ============================================================================
+// MODELS — Price Schedule (NEW — PRD-01)
+// ============================================================================
+
+model PriceSchedule {
+  id        String  @id @default(cuid())
+  productId String
+  unitId    String
+  dayOfWeek Int     // 0=Sun, 1=Mon ... 6=Sat
+  startTime String  // HH:mm
+  endTime   String  // HH:mm
+  price     Decimal @db.Decimal(10, 2)
+  label     String? // e.g., "Happy Hour"
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id])
+  unit    Unit    @relation(fields: [unitId], references: [id])
+
+  @@index([unitId, productId, dayOfWeek])
+}
+
+// ============================================================================
+// MODELS — Floating Account
+// ============================================================================
+
+model FloatingAccount {
+  id            String  @id @default(cuid())
+  checkId       String  @unique
+  customerName  String
+  customerPhone String?
+  pickupCode    String  @unique
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  check Check @relation(fields: [checkId], references: [id])
+}
+
+// ============================================================================
+// MODELS — Reporting & Analytics
+// ============================================================================
+
+model DailyReport {
+  id                String   @id @default(cuid())
+  unitId            String
+  date              DateTime @db.Date
+  totalRevenue      Decimal? @db.Decimal(10, 2)
+  totalOrders       Int?
+  totalCancellations Int?
+  averageTicket     Decimal? @db.Decimal(10, 2)
+  paymentBreakdown  Json?    // { "PIX": 1234.56, "CASH": 789.01 }
+  notes             String?
+  closedBy          String?
+  closedAt          DateTime?
+  reopenedAt        DateTime?
+  reopenReason      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@unique([unitId, date])
+}
+
+model EmployeeStats {
+  id            String   @id @default(cuid())
+  employeeId    String
+  unitId        String
+  date          DateTime @db.Date
+  totalOrders   Int      @default(0)
+  totalRevenue  Decimal  @db.Decimal(10, 2) @default(0)
+  averageTicket Decimal? @db.Decimal(10, 2)
+  totalTips     Decimal? @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, unitId, date])
+}
+
+model HourlyRevenue {
+  id         String   @id @default(cuid())
+  unitId     String
+  date       DateTime @db.Date
+  hour       Int      // 0-23
+  revenue    Decimal  @db.Decimal(10, 2) @default(0)
+  orderCount Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([unitId, date, hour])
+}
+
+// ============================================================================
+// MODELS — System
+// ============================================================================
+
+model Alert {
+  id       String        @id @default(cuid())
+  unitId   String
+  type     AlertType
+  severity AlertSeverity @default(INFO)
+  message  String
+  metadata Json?
+  isRead   Boolean       @default(false)
+  readBy   String?
+  readAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@index([unitId, isRead])
+}
+
+model AuditLog {
+  id         String  @id @default(cuid())
+  unitId     String
+  employeeId String?
+  action     String
+  entity     String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  unit     Unit      @relation(fields: [unitId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([unitId, entity, createdAt])
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  unitId     String
+  employeeId String?
+  type       NotificationType
+  title      String
+  message    String
+  metadata   Json?
+  isRead     Boolean          @default(false)
+  readAt     DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  unit     Unit      @relation(fields: [unitId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([unitId, employeeId, isRead])
+}
