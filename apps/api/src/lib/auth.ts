@@ -48,3 +48,54 @@ export function requireRole(roles: Role[]) {
     }
   };
 }
+
+/**
+ * Middleware that accepts either:
+ * 1. Staff JWT with one of the specified roles, OR
+ * 2. A check session header (X-Check-Session: checkId) for web-menu customers
+ *
+ * The session header contains the check ID. The middleware verifies the
+ * check exists and is OPEN, then populates request.user with a synthetic
+ * payload containing the unitId from the check.
+ */
+export function requireRoleOrCheckSession(roles: Role[]) {
+  return async (request: FastifyRequest, _reply: FastifyReply) => {
+    const authHeader = request.headers.authorization;
+    const checkSession = request.headers['x-check-session'] as string | undefined;
+
+    // Try JWT auth first if Authorization header present
+    if (authHeader) {
+      try {
+        await request.jwtVerify();
+        const { role } = request.user;
+        if (roles.includes(role)) return;
+      } catch {
+        // JWT failed — fall through to check session
+      }
+    }
+
+    // Try check session (checkId in header)
+    if (checkSession) {
+      const prisma = request.server.prisma;
+      const check = await prisma.check.findUnique({
+        where: { id: checkSession },
+        select: { id: true, unitId: true, status: true },
+      });
+
+      if (check && (check.status === 'OPEN' || check.status === 'PAID')) {
+        // Populate request.user with session-based identity
+        (request as unknown as Record<string, unknown>).user = {
+          employeeId: '',
+          unitId: check.unitId,
+          role: 'WAITER' as Role,
+          name: 'Customer',
+        } satisfies JwtPayload;
+        return;
+      }
+
+      throw AppError.unauthorized('Sessão da conta inválida ou expirada');
+    }
+
+    throw AppError.unauthorized('Token inválido ou sessão não fornecida');
+  };
+}

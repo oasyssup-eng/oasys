@@ -6,6 +6,7 @@ import { authPlugin } from './lib/auth';
 import { registerErrorHandler } from './lib/errors';
 import { paymentRoutes } from './modules/payments/payments.routes';
 import { cashRegisterRoutes } from './modules/cash-registers/cash-registers.routes';
+import { registerPaymentExpirationJob } from './modules/payments/payment-expiration.job';
 
 const config = loadConfig();
 
@@ -35,6 +36,8 @@ server.register(
 
 const start = async () => {
   try {
+    await server.ready();
+    registerPaymentExpirationJob(server);
     await server.listen({ port: config.API_PORT, host: config.API_HOST });
   } catch (err) {
     server.log.error(err);

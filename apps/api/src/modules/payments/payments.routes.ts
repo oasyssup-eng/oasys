@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { requireRole } from '../../lib/auth';
+import { requireRole, requireRoleOrCheckSession } from '../../lib/auth';
 import {
   createCashPaymentSchema,
   createPixPaymentSchema,
@@ -41,34 +41,34 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
   );
 
-  // POST /payments/pix
+  // POST /payments/pix — also accepts web-menu session token (PUBLIC*)
   app.post(
     '/pix',
-    { preHandler: requireRole(['WAITER', 'CASHIER', 'MANAGER']) },
+    { preHandler: requireRoleOrCheckSession(['WAITER', 'CASHIER', 'MANAGER']) },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = createPixPaymentSchema.parse(request.body);
       const { employeeId, unitId } = request.user;
       const result = await service.createPixPayment(
         app.prisma,
         body,
-        employeeId,
+        employeeId || null,
         unitId,
       );
       return reply.status(201).send(result);
     },
   );
 
-  // POST /payments/card
+  // POST /payments/card — also accepts web-menu session token (PUBLIC*)
   app.post(
     '/card',
-    { preHandler: requireRole(['WAITER', 'CASHIER', 'MANAGER']) },
+    { preHandler: requireRoleOrCheckSession(['WAITER', 'CASHIER', 'MANAGER']) },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = createCardPaymentSchema.parse(request.body);
       const { employeeId, unitId } = request.user;
       const result = await service.createCardPayment(
         app.prisma,
         body,
-        employeeId,
+        employeeId || null,
         unitId,
       );
       return reply.status(201).send(result);

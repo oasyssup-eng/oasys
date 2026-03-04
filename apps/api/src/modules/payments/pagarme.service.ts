@@ -26,23 +26,45 @@ export class PagarmeService {
     method: string,
     path: string,
     body?: unknown,
+    idempotencyKey?: string,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+
+    const headers: Record<string, string> = {
+      Authorization: this.authHeader,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
 
     try {
       const response = await fetch(url, {
         method,
-        headers: {
-          Authorization: this.authHeader,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(10_000), // 10s timeout
       });
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null);
+        if (response.status === 401) {
+          throw AppError.serviceUnavailable(
+            'Falha de autenticação com Pagar.me. Verifique a API key.',
+          );
+        }
+        if (response.status === 422) {
+          throw AppError.badRequest(
+            `Dados inválidos enviados ao Pagar.me: ${JSON.stringify(errorBody)}`,
+          );
+        }
+        if (response.status >= 500) {
+          throw AppError.serviceUnavailable(
+            'Pagar.me fora do ar. Tente novamente em instantes.',
+          );
+        }
         throw AppError.badGateway(
           `Pagar.me retornou erro ${response.status}: ${JSON.stringify(errorBody)}`,
         );
@@ -95,7 +117,8 @@ export class PagarmeService {
       };
     }
 
-    return this.request<PagarmeOrderResponse>('POST', '/orders', body);
+    const idempotencyKey = `pix_${params.referenceCode}_${Date.now()}`;
+    return this.request<PagarmeOrderResponse>('POST', '/orders', body, idempotencyKey);
   }
 
   async createCardCheckout(params: {
@@ -136,7 +159,8 @@ export class PagarmeService {
       };
     }
 
-    return this.request<PagarmeOrderResponse>('POST', '/orders', body);
+    const idempotencyKey = `card_${params.referenceCode}_${Date.now()}`;
+    return this.request<PagarmeOrderResponse>('POST', '/orders', body, idempotencyKey);
   }
 
   async getOrder(orderId: string): Promise<PagarmeOrderResponse> {
