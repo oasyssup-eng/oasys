@@ -1,13 +1,14 @@
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCartStore, type CartItem } from '../stores/cart.store';
 import { useSessionStore } from '../stores/session.store';
 import { useCreateOrder } from '../hooks/useOrders';
+import { useProducts } from '../hooks/useMenu';
 import { QuantityControl } from '../components/QuantityControl';
 import { EmptyState } from '../components/EmptyState';
-import { LoadingSpinner } from '../components/LoadingSpinner';
 import { formatCurrency } from '../lib/format';
 
-function CartItemRow({ item }: { item: CartItem }) {
+function CartItemRow({ item, isUnavailable }: { item: CartItem; isUnavailable: boolean }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
 
@@ -15,7 +16,7 @@ function CartItemRow({ item }: { item: CartItem }) {
   const lineTotal = (item.unitPrice + modTotal) * item.quantity;
 
   return (
-    <div className="flex gap-3 py-3 border-b border-gray-100 last:border-b-0">
+    <div className={`flex gap-3 py-3 border-b border-gray-100 last:border-b-0 ${isUnavailable ? 'opacity-50' : ''}`}>
       {/* Image */}
       {item.imageUrl ? (
         <img
@@ -25,7 +26,7 @@ function CartItemRow({ item }: { item: CartItem }) {
         />
       ) : (
         <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-          <span className="text-xl">🍽️</span>
+          <span className="text-xl">{'\u{1F37D}\u{FE0F}'}</span>
         </div>
       )}
 
@@ -43,6 +44,13 @@ function CartItemRow({ item }: { item: CartItem }) {
             </svg>
           </button>
         </div>
+
+        {/* Unavailable warning */}
+        {isUnavailable && (
+          <p className="text-xs text-red-500 font-medium mt-0.5">
+            Produto indisponivel - remova para continuar
+          </p>
+        )}
 
         {/* Modifiers */}
         {item.modifiers.length > 0 && (
@@ -84,7 +92,39 @@ export default function Cart() {
   const context = useSessionStore((s) => s.context);
   const createOrder = useCreateOrder(slug!);
 
+  // Re-validate product availability
+  const { data: productsData } = useProducts(slug!, {});
+  const [unavailableIds, setUnavailableIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!productsData?.categories) return;
+
+    // Build a set of all available product IDs
+    const availableIds = new Set<string>();
+    for (const cat of productsData.categories) {
+      for (const product of cat.products) {
+        if (product.isAvailable) {
+          availableIds.add(product.id);
+        }
+      }
+    }
+
+    // Check cart items against available products
+    const unavailable = new Set<string>();
+    for (const item of items) {
+      if (!availableIds.has(item.productId)) {
+        unavailable.add(item.productId);
+      }
+    }
+
+    setUnavailableIds(unavailable);
+  }, [productsData, items]);
+
+  const hasUnavailableItems = unavailableIds.size > 0;
+
   const handlePlaceOrder = async () => {
+    if (hasUnavailableItems) return;
+
     const orderItems = items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
@@ -116,7 +156,7 @@ export default function Cart() {
   if (items.length === 0) {
     return (
       <div className="pt-8">
-        <EmptyState message="Sua sacola esta vazia" icon="🛒" />
+        <EmptyState message="Sua sacola esta vazia" icon={'\u{1F6D2}'} />
         <div className="px-4 mt-4">
           <button
             onClick={() => navigate(`/${slug}/menu`)}
@@ -154,10 +194,26 @@ export default function Cart() {
         )}
       </div>
 
+      {/* Unavailable items warning */}
+      {hasUnavailableItems && (
+        <div className="mx-4 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-800 font-medium">
+            {unavailableIds.size === 1
+              ? 'Um produto ficou indisponivel.'
+              : `${unavailableIds.size} produtos ficaram indisponiveis.`}
+            {' '}Remova para continuar.
+          </p>
+        </div>
+      )}
+
       {/* Items */}
       <div className="px-4">
         {items.map((item, idx) => (
-          <CartItemRow key={`${item.productId}-${idx}`} item={item} />
+          <CartItemRow
+            key={`${item.productId}-${idx}`}
+            item={item}
+            isUnavailable={unavailableIds.has(item.productId)}
+          />
         ))}
       </div>
 
@@ -198,7 +254,7 @@ export default function Cart() {
         <div className="max-w-lg mx-auto">
           <button
             onClick={handlePlaceOrder}
-            disabled={createOrder.isPending}
+            disabled={createOrder.isPending || hasUnavailableItems}
             className="w-full bg-orange-500 text-white py-3.5 rounded-xl font-semibold text-sm hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {createOrder.isPending ? (
@@ -206,8 +262,10 @@ export default function Cart() {
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                 Enviando...
               </>
+            ) : hasUnavailableItems ? (
+              'Remova itens indisponiveis'
             ) : (
-              <>Fazer pedido • {formatCurrency(totalAmount)}</>
+              <>Fazer pedido {'\u2022'} {formatCurrency(totalAmount)}</>
             )}
           </button>
         </div>

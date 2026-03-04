@@ -18,6 +18,59 @@ interface UseOrderStatusResult {
 }
 
 /**
+ * Play a notification sound using Web Audio API.
+ * Two-tone beep pattern — audible even in noisy venues.
+ */
+function playReadySound(): void {
+  try {
+    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+
+    // First beep (higher pitch)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.frequency.value = 880; // A5
+    osc1.type = 'sine';
+    gain1.gain.value = 0.3;
+    osc1.start(ctx.currentTime);
+    osc1.stop(ctx.currentTime + 0.15);
+
+    // Second beep (even higher)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.frequency.value = 1175; // D6
+    osc2.type = 'sine';
+    gain2.gain.value = 0.3;
+    osc2.start(ctx.currentTime + 0.2);
+    osc2.stop(ctx.currentTime + 0.35);
+
+    // Third beep (highest — attention grabbing)
+    const osc3 = ctx.createOscillator();
+    const gain3 = ctx.createGain();
+    osc3.connect(gain3);
+    gain3.connect(ctx.destination);
+    osc3.frequency.value = 1397; // F6
+    osc3.type = 'sine';
+    gain3.gain.value = 0.3;
+    osc3.start(ctx.currentTime + 0.4);
+    osc3.stop(ctx.currentTime + 0.6);
+
+    // Cleanup context after sounds finish
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 1000);
+  } catch {
+    // Audio not supported — silent fallback
+  }
+}
+
+/**
  * Hook that subscribes to real-time order status updates via WebSocket.
  * Falls back to polling if WebSocket connection fails.
  */
@@ -72,9 +125,12 @@ export function useOrderStatus(
             if (newStatus) {
               setStatus(newStatus);
 
-              // Vibrate on READY
-              if (newStatus === 'READY' && navigator.vibrate) {
-                navigator.vibrate([200, 100, 200, 100, 200]);
+              // Sound + vibration on READY
+              if (newStatus === 'READY') {
+                playReadySound();
+                if (navigator.vibrate) {
+                  navigator.vibrate([200, 100, 200, 100, 200]);
+                }
               }
             }
           }

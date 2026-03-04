@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useProducts, useCategories } from '../hooks/useMenu';
 import { CategoryBar } from '../components/CategoryBar';
 import { ProductCard } from '../components/ProductCard';
 import { CartFAB } from '../components/CartFAB';
+import { TagFilter } from '../components/TagFilter';
+import { HappyHourBanner } from '../components/HappyHourBanner';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 
@@ -12,15 +14,47 @@ export default function Menu() {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTags, setActiveTags] = useState<string[]>([]);
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const { data: categoriesData, isLoading: categoriesLoading } = useCategories(slug!);
   const { data: productsData, isLoading: productsLoading } = useProducts(slug!, {
     search: searchQuery || undefined,
+    tags: activeTags.length > 0 ? activeTags.join(',') : undefined,
   });
 
   const isLoading = categoriesLoading || productsLoading;
   const categories = productsData?.categories ?? [];
+
+  // Extract all unique tags from products
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const cat of categories) {
+      for (const product of cat.products) {
+        for (const tag of product.tags) {
+          tagSet.add(tag);
+        }
+      }
+    }
+    return Array.from(tagSet).sort();
+  }, [categories]);
+
+  // Detect active happy hour promotions
+  const happyHourInfo = useMemo(() => {
+    let promoCount = 0;
+    let promoLabel: string | null = null;
+
+    for (const cat of categories) {
+      for (const product of cat.products) {
+        if (product.priceLabel && product.effectivePrice < product.basePrice) {
+          promoCount++;
+          if (!promoLabel) promoLabel = product.priceLabel;
+        }
+      }
+    }
+
+    return promoLabel ? { label: promoLabel, count: promoCount } : null;
+  }, [categories]);
 
   // Set first category as active by default
   useEffect(() => {
@@ -72,6 +106,12 @@ export default function Menu() {
     }
   }, []);
 
+  const handleTagToggle = useCallback((tag: string) => {
+    setActiveTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  }, []);
+
   if (isLoading) return <LoadingSpinner />;
 
   return (
@@ -112,8 +152,18 @@ export default function Menu() {
         </div>
       </div>
 
+      {/* Tag filters */}
+      {allTags.length > 0 && !searchQuery && (
+        <TagFilter tags={allTags} activeTags={activeTags} onToggle={handleTagToggle} />
+      )}
+
+      {/* Happy hour banner */}
+      {happyHourInfo && !searchQuery && (
+        <HappyHourBanner label={happyHourInfo.label} productCount={happyHourInfo.count} />
+      )}
+
       {/* Category bar */}
-      {categoriesData && categoriesData.length > 0 && !searchQuery && (
+      {categoriesData && categoriesData.length > 0 && !searchQuery && activeTags.length === 0 && (
         <CategoryBar
           categories={categoriesData}
           activeId={activeCategory}
@@ -124,8 +174,8 @@ export default function Menu() {
       {/* Products by category */}
       {categories.length === 0 ? (
         <EmptyState
-          message={searchQuery ? 'Nenhum produto encontrado' : 'Cardapio vazio'}
-          icon={searchQuery ? '🔍' : '📋'}
+          message={searchQuery || activeTags.length > 0 ? 'Nenhum produto encontrado' : 'Cardapio vazio'}
+          icon={searchQuery || activeTags.length > 0 ? '\u{1F50D}' : '\u{1F4CB}'}
         />
       ) : (
         <div className="px-4 py-3">
@@ -149,6 +199,18 @@ export default function Menu() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Active tag filters indicator */}
+      {activeTags.length > 0 && (
+        <div className="px-4 pb-2">
+          <button
+            onClick={() => setActiveTags([])}
+            className="text-sm text-orange-600 font-medium hover:text-orange-700"
+          >
+            Limpar filtros ({activeTags.length})
+          </button>
         </div>
       )}
 

@@ -1,10 +1,15 @@
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useSessionStore } from './stores/session.store';
+import { useCheckUpdates } from './hooks/useCheckUpdates';
+import { ToastProvider } from './components/NotificationToast';
 
-export function App() {
+function AppLayout() {
   const { slug } = useParams();
   const unit = useSessionStore((s) => s.unit);
   const navigate = useNavigate();
+
+  // Subscribe to real-time check updates (invalidates queries automatically)
+  useCheckUpdates(slug);
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-lg mx-auto relative">
@@ -42,5 +47,13 @@ export function App() {
         <Outlet />
       </main>
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <ToastProvider>
+      <AppLayout />
+    </ToastProvider>
   );
 }
