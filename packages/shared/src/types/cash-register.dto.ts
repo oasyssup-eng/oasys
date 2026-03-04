@@ -32,7 +32,6 @@ export interface CashRegisterOperationDTO {
 
 /** Input for opening a cash register */
 export interface OpenCashRegisterInput {
-  unitId: string;
   type: 'OPERATOR' | 'DIGITAL';
   openingBalance: number;
 }
@@ -41,4 +40,15 @@ export interface OpenCashRegisterInput {
 export interface CloseCashRegisterInput {
   closingBalance: number;
   closingNotes?: string;
+}
+
+/** Cash register report with summary */
+export interface CashRegisterReportDTO extends CashRegisterDTO {
+  operations: CashRegisterOperationDTO[];
+  summary: {
+    totalCashIn: number;
+    totalWithdrawals: number;
+    totalSupplies: number;
+    transactionCount: number;
+  };
 }
