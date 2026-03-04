@@ -9,12 +9,15 @@ export type {
   CreateCashPaymentInput,
   CreatePixPaymentInput,
   CreateCardPaymentInput,
+  CreateCardPresentInput,
+  PaymentSummaryDTO,
 } from './payment.dto';
 export type {
   CashRegisterDTO,
   CashRegisterOperationDTO,
   OpenCashRegisterInput,
   CloseCashRegisterInput,
+  CashRegisterReportDTO,
 } from './cash-register.dto';
 export type {
   StockItemDTO,

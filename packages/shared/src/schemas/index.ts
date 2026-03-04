@@ -12,6 +12,7 @@ export {
   createCashPaymentSchema,
   createPixPaymentSchema,
   createCardPaymentSchema,
+  createCardPresentSchema,
 } from './payment.schema';
 
 export {
