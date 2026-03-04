@@ -18,20 +18,20 @@ oasys/
 │   └── shared/              # Shared types + utilities
 ├── docs/
 │   ├── Oasys Module Map.jsx                        # Master roadmap — READ FIRST
-│   ├── OASYS_PRD-01_Schema_Foundation.md            # Phase 1
-│   ├── OASYS_PRD-02_Payments_CashRegister.md        # Phase 1
-│   ├── OASYS_PRD-03_Cardapio_Digital.md             # Phase 1
-│   ├── OASYS_PRD-04_PDV_Gestao_Pedidos.md           # Phase 1
-│   ├── OASYS_PRD-05_KDS_Producao.md                 # Phase 1
-│   ├── OASYS_PRD-06_Fiscal_NFCe.md                  # Phase 1
-│   ├── OASYS_PRD-07_Fechamento_Relatorios.md        # Phase 1
-│   ├── OASYS_PRD-08_Estoque_Basico.md               # Phase 1
-│   ├── OASYS_PRD-09_WhatsApp_Isis.md                # Phase 2
-│   ├── OASYS_PRD-10_Dashboard_BI_Avancado.md        # Phase 2
-│   ├── OASYS_PRD-11_CRM_Fidelizacao.md              # Phase 2
-│   ├── OASYS_PRD-12_Pessoas_Turnos.md               # Phase 2
-│   ├── OASYS_PRD-13_Auditoria_Seguranca.md          # Phase 2
-│   └── OASYS_PRD-14_Delivery.md                     # Phase 2
+│   ├── OASYS_PRD-01_Schema_Foundation.md           # Phase 1
+│   ├── OASYS_PRD-02_Payments_CashRegister.md       # Phase 1
+│   ├── OASYS_PRD-03_Cardapio_Digital.md            # Phase 1
+│   ├── OASYS_PRD-04_PDV_Gestao_Pedidos.md          # Phase 1
+│   ├── OASYS_PRD-05_KDS_Producao.md                # Phase 1
+│   ├── OASYS_PRD-06_Fiscal_NFCe.md                 # Phase 1
+│   ├── OASYS_PRD-07_Fechamento_Relatorios.md       # Phase 1
+│   ├── OASYS_PRD-08_Estoque_Basico.md              # Phase 1
+│   ├── OASYS_PRD-09_WhatsApp_Isis.md               # Phase 2
+│   ├── OASYS_PRD-10_Dashboard_BI_Avancado.md       # Phase 2
+│   ├── OASYS_PRD-11_CRM_Fidelizacao.md             # Phase 2
+│   ├── OASYS_PRD-12_Pessoas_Turnos.md              # Phase 2
+│   ├── OASYS_PRD-13_Auditoria_Seguranca.md         # Phase 2
+│   └── OASYS_PRD-14_Delivery.md                    # Phase 2
 ├── turbo.json
 └── CLAUDE.md                # This file
 ```
