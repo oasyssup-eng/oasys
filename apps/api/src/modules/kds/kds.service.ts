@@ -4,6 +4,7 @@ import { publishOrderEvent } from '../menu/ws.handler';
 import { publishWaiterEvent } from '../waiter/ws.handler';
 import { publishKDSEvent, publishPickupEvent } from './ws.handler';
 import { getNextCourseToRelease } from './course-sequencer';
+import { deductStockForOrder } from '../stock/deduction.service';
 import type {
   KDSQueueQuery,
   BumpOrderInput,
@@ -230,6 +231,13 @@ export async function startOrder(
     data: { orderId, orderNumber: order.orderNumber },
   });
 
+  // Fire-and-forget stock deduction — must NOT block order production
+  try {
+    await deductStockForOrder(prisma, orderId, unitId);
+  } catch (err) {
+    console.error('[stock-deduction] Failed for order', orderId, err);
+  }
+
   return {
     orderId,
     status: updated.status,
@@ -279,6 +287,13 @@ export async function bumpOrder(
     });
     order.status = 'PREPARING';
     order.stationCompletions = completions;
+
+    // Fire-and-forget stock deduction on auto-start
+    try {
+      await deductStockForOrder(prisma, orderId, unitId);
+    } catch (err) {
+      console.error('[stock-deduction] Failed for auto-started order', orderId, err);
+    }
   }
 
   if (order.status !== 'PREPARING') {

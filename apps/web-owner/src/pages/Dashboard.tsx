@@ -292,6 +292,9 @@ export function Dashboard() {
         <Link to="/fiscal" className="text-blue-600 hover:underline">
           Notas Fiscais →
         </Link>
+        <Link to="/stock" className="text-blue-600 hover:underline">
+          Estoque →
+        </Link>
       </div>
     </div>
   );

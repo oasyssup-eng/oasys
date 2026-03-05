@@ -25,6 +25,8 @@ import { registerFiscalReconciliationJob } from './modules/fiscal/reconciliation
 import { closingRoutes } from './modules/closing/closing.routes';
 import { registerAutoCloseReminderJob } from './modules/closing/auto-close-reminder.job';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
+import { stockRoutes } from './modules/stock/stock.routes';
+import { recipeRoutes } from './modules/stock/recipe.routes';
 
 const config = loadConfig();
 
@@ -59,6 +61,8 @@ server.register(
     app.register(fiscalRoutes, { prefix: '/fiscal' });
     app.register(closingRoutes, { prefix: '/closing' });
     app.register(dashboardRoutes, { prefix: '/dashboard' });
+    app.register(stockRoutes, { prefix: '/stock' });
+    app.register(recipeRoutes, { prefix: '/stock/recipes' });
     app.register(registerWaiterWs);
     app.register(registerKDSWs);
   },
