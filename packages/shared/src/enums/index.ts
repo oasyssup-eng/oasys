@@ -24,6 +24,7 @@ export const CheckStatus = {
   CLOSED: 'CLOSED',
   PAID: 'PAID',
   CANCELLED: 'CANCELLED',
+  SPLIT: 'SPLIT',
 } as const;
 export type CheckStatus = (typeof CheckStatus)[keyof typeof CheckStatus];
 

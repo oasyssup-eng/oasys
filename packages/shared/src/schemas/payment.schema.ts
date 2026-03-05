@@ -5,13 +5,14 @@ import { cuidSchema, cpfSchema } from './common.schema';
 export const createCashPaymentSchema = z.object({
   checkId: cuidSchema,
   amount: z.number().positive('Amount must be positive'),
-  cashRegisterId: cuidSchema,
+  receivedAmount: z.number().positive().optional(),
 });
 
 /** Schema for creating a PIX payment (generates QR code via Pagar.me) */
 export const createPixPaymentSchema = z.object({
   checkId: cuidSchema,
   amount: z.number().positive('Amount must be positive'),
+  customerName: z.string().optional(),
   customerCpf: cpfSchema.optional(),
 });
 
@@ -19,5 +20,15 @@ export const createPixPaymentSchema = z.object({
 export const createCardPaymentSchema = z.object({
   checkId: cuidSchema,
   amount: z.number().positive('Amount must be positive'),
-  method: z.enum(['CREDIT_CARD', 'DEBIT_CARD']),
+  customerName: z.string().optional(),
+  customerEmail: z.string().email().optional(),
+});
+
+/** Schema for registering a card-present payment (POS machine already processed) */
+export const createCardPresentSchema = z.object({
+  checkId: cuidSchema,
+  amount: z.number().positive('Amount must be positive'),
+  cardBrand: z.string().optional(),
+  lastFourDigits: z.string().length(4).optional(),
+  isDebit: z.boolean().default(false),
 });

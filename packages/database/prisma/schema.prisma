@@ -25,6 +25,7 @@ enum CheckStatus {
   CLOSED
   PAID
   CANCELLED
+  SPLIT
 }
 
 enum OrderStatus {
@@ -338,6 +339,8 @@ model Table {
   label  String?
   posX   Float?
   posY   Float?
+  isActive          Boolean @default(true)
+  hasServiceRequest Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -348,6 +351,7 @@ model Table {
   checks Check[]
 
   @@unique([unitId, number])
+  @@index([unitId, isActive])
 }
 
 // ============================================================================
@@ -517,6 +521,10 @@ model OrderItem {
   totalPrice Decimal @db.Decimal(10, 2)
   notes      String?
   modifiers  Json?   // Selected modifier details
+
+  // Partial delivery tracking (PRD-04)
+  isDelivered Boolean   @default(false)
+  deliveredAt DateTime?
 
   createdAt DateTime @default(now())
 
