@@ -4,9 +4,10 @@ import { StationSelector } from '../components/StationSelector';
 import { KDSHeader } from '../components/KDSHeader';
 import { OrderTicket } from '../components/OrderTicket';
 import { HeldSection } from '../components/HeldSection';
+import { ReadySection } from '../components/ReadySection';
 
 export function KDSQueue() {
-  const { orders, heldOrders, isLoading, loadQueue, loadReadyQueue } = useKDSStore();
+  const { orders, heldOrders, readyOrders, isLoading, loadQueue, loadReadyQueue } = useKDSStore();
 
   useEffect(() => {
     loadQueue();
@@ -43,6 +44,7 @@ export function KDSQueue() {
       </div>
 
       {heldOrders.length > 0 && <HeldSection orders={heldOrders} />}
+      {readyOrders.length > 0 && <ReadySection orders={readyOrders} />}
     </div>
   );
 }

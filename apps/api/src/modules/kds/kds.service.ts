@@ -806,6 +806,68 @@ export async function getStats(prisma: PrismaClient, unitId: string) {
 
   const avgPrepSeconds = await getAvgPrepTime(prisma, unitId);
 
+  // By-station breakdown: count items per station today
+  const stationOrders = await prisma.orderItem.groupBy({
+    by: ['productId'],
+    where: {
+      order: { check: { unitId }, createdAt: { gte: todayStart } },
+    },
+    _sum: { quantity: true },
+  });
+
+  const stationProductIds = stationOrders.map((s) => s.productId);
+  const stationProducts = stationProductIds.length > 0
+    ? await prisma.product.findMany({
+        where: { id: { in: stationProductIds } },
+        select: { id: true, station: true, name: true },
+      })
+    : [];
+
+  const productLookup = new Map(stationProducts.map((p) => [p.id, p]));
+
+  const byStation: Record<string, { orderItems: number; totalQuantity: number }> = {};
+  for (const row of stationOrders) {
+    const product = productLookup.get(row.productId);
+    const station = product?.station ?? 'OTHER';
+    const existing = byStation[station];
+    if (!existing) {
+      byStation[station] = { orderItems: 1, totalQuantity: row._sum.quantity ?? 0 };
+    } else {
+      existing.orderItems += 1;
+      existing.totalQuantity += row._sum.quantity ?? 0;
+    }
+  }
+
+  // Top products: most ordered items today
+  const topProductsRaw = await prisma.orderItem.groupBy({
+    by: ['productId'],
+    where: {
+      order: { check: { unitId }, createdAt: { gte: todayStart } },
+    },
+    _sum: { quantity: true },
+    orderBy: { _sum: { quantity: 'desc' } },
+    take: 10,
+  });
+
+  const topProductIds = topProductsRaw.map((t) => t.productId);
+  const topProductDetails = topProductIds.length > 0
+    ? await prisma.product.findMany({
+        where: { id: { in: topProductIds } },
+        select: { id: true, name: true, station: true },
+      })
+    : [];
+
+  const topProductNameMap = new Map(topProductDetails.map((p) => [p.id, p]));
+  const topProducts = topProductsRaw.map((row) => {
+    const product = topProductNameMap.get(row.productId);
+    return {
+      productId: row.productId,
+      productName: product?.name ?? 'Desconhecido',
+      station: product?.station ?? null,
+      totalQuantity: row._sum.quantity ?? 0,
+    };
+  });
+
   return {
     period: 'today',
     overall: {
@@ -818,6 +880,8 @@ export async function getStats(prisma: PrismaClient, unitId: string) {
       currentQueueLength: currentQueue,
       currentHeldOrders: currentHeld,
     },
+    byStation,
+    topProducts,
   };
 }
 

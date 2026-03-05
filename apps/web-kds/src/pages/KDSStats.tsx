@@ -16,7 +16,7 @@ export function KDSStats() {
     );
   }
 
-  const { overall } = stats;
+  const { overall, byStation, topProducts } = stats;
 
   const formatTime = (seconds: number) => {
     if (seconds === 0) return '--';
@@ -25,10 +25,19 @@ export function KDSStats() {
     return `${m}m ${s}s`;
   };
 
+  const stationColorMap: Record<string, string> = {
+    BAR: 'bg-blue-50 border-blue-200 text-blue-700',
+    KITCHEN: 'bg-orange-50 border-orange-200 text-orange-700',
+    GRILL: 'bg-red-50 border-red-200 text-red-700',
+    DESSERT: 'bg-purple-50 border-purple-200 text-purple-700',
+    OTHER: 'bg-gray-50 border-gray-200 text-gray-700',
+  };
+
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-6">
       <h2 className="text-lg font-bold text-gray-800">Estatisticas — Hoje</h2>
 
+      {/* Overall Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Pedidos" value={overall.totalOrders} color="blue" />
         <StatCard label="Concluidos" value={overall.completedOrders} color="green" />
@@ -43,6 +52,52 @@ export function KDSStats() {
         <StatCard label="Cortesias" value={overall.courtesyOrders} color="pink" />
         <StatCard label="Consumo Interno" value={overall.staffMeals} color="gray" />
       </div>
+
+      {/* By Station Breakdown */}
+      {byStation && Object.keys(byStation).length > 0 && (
+        <div>
+          <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider mb-2">
+            Por Estacao
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {Object.entries(byStation).map(([station, data]) => (
+              <div
+                key={station}
+                className={`rounded-xl border p-4 ${stationColorMap[station] ?? stationColorMap.OTHER}`}
+              >
+                <div className="text-xs font-medium opacity-80">{station}</div>
+                <div className="text-2xl font-bold mt-1">{data.totalQuantity}</div>
+                <div className="text-xs opacity-60 mt-0.5">{data.orderItems} itens distintos</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Top Products */}
+      {topProducts && topProducts.length > 0 && (
+        <div>
+          <h3 className="text-sm font-bold text-gray-600 uppercase tracking-wider mb-2">
+            Produtos Mais Pedidos
+          </h3>
+          <div className="bg-white rounded-xl border divide-y">
+            {topProducts.map((product, i) => (
+              <div key={product.productId} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-gray-400 w-6">{i + 1}</span>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{product.productName}</div>
+                    {product.station && (
+                      <div className="text-xs text-gray-400">{product.station}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="text-lg font-bold text-gray-700">{product.totalQuantity}x</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

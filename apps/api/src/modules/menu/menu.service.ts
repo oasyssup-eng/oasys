@@ -14,6 +14,7 @@ import { resolvePricesBatch, resolvePrice } from './price.service';
 import type { SessionData } from './session.service';
 import { publishOrderEvent } from './ws.handler';
 import { publishKDSEvent } from '../kds/ws.handler';
+import { getCoursesToHold } from '../kds/course-sequencer';
 
 // ── Get Categories ──────────────────────────────────────────────────
 
@@ -259,6 +260,46 @@ export async function searchProducts(
   return { results, totalCount };
 }
 
+// ── Course Type Helpers ──────────────────────────────────────────────
+
+const STATION_TO_COURSE: Record<string, string> = {
+  BAR: 'DRINK',
+  KITCHEN: 'MAIN',
+  GRILL: 'MAIN',
+  DESSERT: 'DESSERT',
+};
+
+const COURSE_PRIORITY: Record<string, number> = {
+  DRINK: 0,
+  STARTER: 1,
+  MAIN: 2,
+  DESSERT: 3,
+};
+
+/**
+ * Infer the dominant courseType from product stations.
+ * Returns the highest-level course present (DESSERT > MAIN > STARTER > DRINK).
+ */
+function inferCourseType(
+  products: Array<{ station: string | null }>,
+): string | null {
+  let highest: string | null = null;
+  let highestPriority = -1;
+
+  for (const p of products) {
+    if (!p.station) continue;
+    const course = STATION_TO_COURSE[p.station];
+    if (!course) continue;
+    const priority = COURSE_PRIORITY[course] ?? -1;
+    if (priority > highestPriority) {
+      highestPriority = priority;
+      highest = course;
+    }
+  }
+
+  return highest;
+}
+
 // ── Create Order ────────────────────────────────────────────────────
 
 export async function createMenuOrder(
@@ -331,6 +372,40 @@ export async function createMenuOrder(
     orderStatus = 'PENDING';
   }
 
+  // 4b. Course sequencing — auto-hold if prerequisite course not yet ready
+  const orderProducts = items.map((item) => productMap.get(item.productId)!);
+  const courseType = inferCourseType(orderProducts);
+
+  if (orderStatus === 'PENDING' && courseType) {
+    const existingOrders = await prisma.order.findMany({
+      where: { checkId, courseType: { not: null } },
+      select: { courseType: true, status: true },
+    });
+
+    const allCourseTypes = [
+      ...existingOrders.map((o) => o.courseType),
+      courseType,
+    ];
+    const toHold = getCoursesToHold(allCourseTypes);
+
+    if (toHold.has(courseType)) {
+      // Only hold if prerequisite course has NOT completed yet
+      const prereqReady = existingOrders.some((o) => {
+        if (courseType === 'MAIN') {
+          return o.courseType === 'STARTER' && (o.status === 'READY' || o.status === 'DELIVERED');
+        }
+        if (courseType === 'DESSERT') {
+          return o.courseType === 'MAIN' && (o.status === 'READY' || o.status === 'DELIVERED');
+        }
+        return false;
+      });
+
+      if (!prereqReady) {
+        orderStatus = 'HELD';
+      }
+    }
+  }
+
   // 5. Generate order number (sequential per unit per day)
   const orderNumber = await generateOrderNumber(prisma, unitId);
 
@@ -340,6 +415,7 @@ export async function createMenuOrder(
       data: {
         checkId,
         status: orderStatus,
+        courseType,
         orderNumber,
         source: 'WEB_MENU',
         items: {
