@@ -5,7 +5,7 @@ const UNIT_TYPES = ['UN', 'KG', 'L', 'ML', 'G', 'DOSE'] as const;
 interface StockItemFormData {
   name: string;
   sku?: string;
-  unitType: string;
+  unitType?: string;
   quantity?: number;
   minQuantity?: number;
   costPrice?: number;
@@ -38,7 +38,7 @@ export function StockItemForm({
     onSubmit({
       name,
       sku: sku || undefined,
-      unitType,
+      unitType: isEdit ? undefined : unitType, // unitType cannot be changed after creation
       quantity: isEdit ? undefined : quantity,
       minQuantity: minQuantity || undefined,
       costPrice: costPrice || undefined,
@@ -80,7 +80,8 @@ export function StockItemForm({
           <select
             value={unitType}
             onChange={(e) => setUnitType(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={isEdit}
+            className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isEdit ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
           >
             {UNIT_TYPES.map((ut) => (
               <option key={ut} value={ut}>

@@ -18,7 +18,7 @@ export type CreateStockItemInput = z.infer<typeof createStockItemSchema>;
 export const updateStockItemSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   sku: z.string().max(50).nullable().optional(),
-  unitType: z.enum(UNIT_TYPES).optional(),
+  // unitType intentionally excluded — cannot be changed after creation (PRD-08 R2)
   minQuantity: z.number().min(0).nullable().optional(),
   costPrice: z.number().min(0).nullable().optional(),
   supplierId: z.string().cuid().nullable().optional(),

@@ -67,18 +67,33 @@ export async function createStockItem(
     }
   }
 
+  const initialQty = input.quantity ?? 0;
+
   const item = await prisma.stockItem.create({
     data: {
       unitId,
       name: input.name,
       sku: input.sku,
       unitType: input.unitType,
-      quantity: input.quantity ?? 0,
+      quantity: initialQty,
       minQuantity: input.minQuantity,
       costPrice: input.costPrice,
       supplierId: input.supplierId,
     },
   });
+
+  // Gap 1: Auto-create IN movement when initial quantity > 0
+  if (initialQty > 0) {
+    await prisma.stockMovement.create({
+      data: {
+        stockItemId: item.id,
+        type: 'IN',
+        quantity: initialQty,
+        reason: 'Estoque inicial',
+        costPrice: input.costPrice,
+      },
+    });
+  }
 
   return formatItem(item);
 }
@@ -111,7 +126,6 @@ export async function updateStockItem(
     data: {
       ...(input.name !== undefined && { name: input.name }),
       ...(input.sku !== undefined && { sku: input.sku }),
-      ...(input.unitType !== undefined && { unitType: input.unitType }),
       ...(input.minQuantity !== undefined && { minQuantity: input.minQuantity }),
       ...(input.costPrice !== undefined && { costPrice: input.costPrice }),
       ...(input.supplierId !== undefined && { supplierId: input.supplierId }),
@@ -225,6 +239,16 @@ export async function deactivateStockItem(
     throw AppError.notFound('Item de estoque não encontrado');
   }
 
+  // Gap 3: Block deactivation if item is used in active recipes
+  const recipeCount = await prisma.productIngredient.count({
+    where: { stockItemId: itemId },
+  });
+  if (recipeCount > 0) {
+    throw AppError.badRequest(
+      `Remova o insumo das fichas técnicas antes de desativar (usado em ${recipeCount} receita${recipeCount > 1 ? 's' : ''})`,
+    );
+  }
+
   const item = await prisma.stockItem.update({
     where: { id: itemId },
     data: { isActive: false },
@@ -313,6 +337,56 @@ export async function createMovement(
     });
   }
 
+  // Gap 4: Alert when adjustment diff > 10%
+  if (input.type === 'ADJUSTMENT' && currentQty > 0) {
+    const diff = Math.abs(newQuantity - currentQty);
+    const pctDiff = diff / currentQty;
+    if (pctDiff > 0.10) {
+      await prisma.alert.create({
+        data: {
+          unitId,
+          type: 'LOW_STOCK',
+          severity: 'WARNING',
+          message:
+            `Ajuste de ${(pctDiff * 100).toFixed(1)}% no ${stockItem.name}. ` +
+            `Sistema: ${currentQty}, Real: ${newQuantity}.`,
+          metadata: {
+            stockItemId: stockItem.id,
+            stockItemName: stockItem.name,
+            adjustmentPct: pctDiff * 100,
+            systemQuantity: currentQty,
+            actualQuantity: newQuantity,
+          },
+        },
+      });
+    }
+  }
+
+  // Gap 5: Alert when loss value > R$100
+  if (input.type === 'LOSS') {
+    const costPerUnit = input.costPrice ?? (stockItem.costPrice ? Number(stockItem.costPrice) : 0);
+    const lossValue = input.quantity * costPerUnit;
+    if (lossValue > 100) {
+      await prisma.alert.create({
+        data: {
+          unitId,
+          type: 'LOW_STOCK',
+          severity: 'WARNING',
+          message:
+            `Perda significativa: ${stockItem.name} — ` +
+            `${input.quantity} ${stockItem.unitType} (R$ ${lossValue.toFixed(2)})`,
+          metadata: {
+            stockItemId: stockItem.id,
+            stockItemName: stockItem.name,
+            lossQuantity: input.quantity,
+            lossValue,
+            reason: input.reason,
+          },
+        },
+      });
+    }
+  }
+
   // Check product availability
   if (newQuantity <= 0) {
     await checkAndDisableProducts(prisma, input.stockItemId);
@@ -397,12 +471,16 @@ export async function getStockDashboard(
   prisma: PrismaClient,
   unitId: string,
 ) {
-  const [totalItems, activeItems, allItems, recentMovements, alerts] = await Promise.all([
+  const now = new Date();
+  const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const [totalItems, activeItems, allItems, recentMovements, alerts, recentOutMovements, todayOutMovements] = await Promise.all([
     prisma.stockItem.count({ where: { unitId } }),
     prisma.stockItem.count({ where: { unitId, isActive: true } }),
     prisma.stockItem.findMany({
       where: { unitId, isActive: true },
-      select: { quantity: true, costPrice: true, minQuantity: true },
+      select: { id: true, name: true, quantity: true, costPrice: true, minQuantity: true, unitType: true },
     }),
     prisma.stockMovement.findMany({
       where: { stockItem: { unitId } },
@@ -416,7 +494,32 @@ export async function getStockDashboard(
     prisma.alert.count({
       where: { unitId, type: 'LOW_STOCK', isRead: false },
     }),
+    // Gap 6: OUT movements in last 3h for estimatedRunout
+    prisma.stockMovement.findMany({
+      where: {
+        stockItem: { unitId },
+        type: 'OUT',
+        createdAt: { gte: threeHoursAgo },
+      },
+      select: { stockItemId: true, quantity: true },
+    }),
+    // Gap 7: OUT movements today for topConsumed
+    prisma.stockMovement.findMany({
+      where: {
+        stockItem: { unitId },
+        type: 'OUT',
+        createdAt: { gte: todayStart },
+      },
+      include: { stockItem: { select: { name: true, unitType: true, costPrice: true } } },
+    }),
   ]);
+
+  // Gap 6: Build consumption rate map (qty consumed per stockItemId in last 3h)
+  const consumptionMap = new Map<string, number>();
+  for (const m of recentOutMovements) {
+    const existing = consumptionMap.get(m.stockItemId) ?? 0;
+    consumptionMap.set(m.stockItemId, existing + Number(m.quantity));
+  }
 
   let belowMinCount = 0;
   let totalValue = 0;
@@ -431,12 +534,41 @@ export async function getStockDashboard(
     }
   }
 
+  // Gap 7: Aggregate top consumed items today
+  const consumedMap = new Map<string, { name: string; unitType: string; consumed: number; cost: number }>();
+  for (const m of todayOutMovements) {
+    const qty = Number(m.quantity);
+    const costPerUnit = m.costPrice ? Number(m.costPrice) : (m.stockItem.costPrice ? Number(m.stockItem.costPrice) : 0);
+    const existing = consumedMap.get(m.stockItemId);
+    if (existing) {
+      existing.consumed += qty;
+      existing.cost += qty * costPerUnit;
+    } else {
+      consumedMap.set(m.stockItemId, {
+        name: m.stockItem.name,
+        unitType: m.stockItem.unitType,
+        consumed: qty,
+        cost: qty * costPerUnit,
+      });
+    }
+  }
+  const topConsumed = Array.from(consumedMap.values())
+    .sort((a, b) => b.cost - a.cost)
+    .slice(0, 5)
+    .map((c) => ({
+      name: c.name,
+      consumed: c.consumed,
+      unit: c.unitType,
+      cost: c.cost,
+    }));
+
   return {
     totalItems,
     activeItems,
     belowMinCount,
     totalValue,
     unresolvedAlerts: alerts,
+    topConsumed,
     recentMovements: recentMovements.map((m) => ({
       id: m.id,
       stockItemName: m.stockItem.name,
@@ -478,19 +610,53 @@ export async function listItemsBelowMinimum(
   prisma: PrismaClient,
   unitId: string,
 ) {
-  const items = await prisma.stockItem.findMany({
-    where: {
-      unitId,
-      isActive: true,
-      minQuantity: { not: null },
-    },
-    orderBy: { name: 'asc' },
-  });
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+  const [items, recentOutMovements] = await Promise.all([
+    prisma.stockItem.findMany({
+      where: {
+        unitId,
+        isActive: true,
+        minQuantity: { not: null },
+      },
+      orderBy: { name: 'asc' },
+    }),
+    // Gap 6: OUT movements in last 3h for estimatedRunout
+    prisma.stockMovement.findMany({
+      where: {
+        stockItem: { unitId },
+        type: 'OUT',
+        createdAt: { gte: threeHoursAgo },
+      },
+      select: { stockItemId: true, quantity: true },
+    }),
+  ]);
+
+  // Build consumption rate map (qty consumed per hour over last 3h)
+  const consumptionMap = new Map<string, number>();
+  for (const m of recentOutMovements) {
+    const existing = consumptionMap.get(m.stockItemId) ?? 0;
+    consumptionMap.set(m.stockItemId, existing + Number(m.quantity));
+  }
 
   return items
     .filter((item) => Number(item.quantity) <= Number(item.minQuantity))
-    .map((item) => ({
-      ...formatItem(item),
-      deficit: Number(item.minQuantity) - Number(item.quantity),
-    }));
+    .map((item) => {
+      const qty = Number(item.quantity);
+      const consumed3h = consumptionMap.get(item.id) ?? 0;
+      const consumptionPerHour = consumed3h / 3;
+      let estimatedRunout: string | null = null;
+      if (consumptionPerHour > 0 && qty > 0) {
+        const hoursLeft = qty / consumptionPerHour;
+        estimatedRunout = hoursLeft < 1
+          ? `~${Math.round(hoursLeft * 60)}min`
+          : `~${Math.round(hoursLeft)}h`;
+      }
+
+      return {
+        ...formatItem(item),
+        deficit: Number(item.minQuantity) - qty,
+        estimatedRunout,
+      };
+    });
 }

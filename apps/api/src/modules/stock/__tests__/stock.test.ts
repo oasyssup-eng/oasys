@@ -21,6 +21,7 @@ describe('createStockItem', () => {
     const sample = createSampleStockItem();
     mockPrisma.stockItem.findUnique.mockResolvedValue(null); // No SKU conflict
     mockPrisma.stockItem.create.mockResolvedValue(sample);
+    mockPrisma.stockMovement.create.mockResolvedValue({});
 
     const result = await service.createStockItem(prisma(), 'unit_001', {
       name: 'Chopp Pilsen',
@@ -35,6 +36,45 @@ describe('createStockItem', () => {
     expect(result.quantity).toBe(50);
     expect(result.unitType).toBe('L');
     expect(mockPrisma.stockItem.create).toHaveBeenCalledOnce();
+  });
+
+  it('auto-creates IN movement when initial quantity > 0', async () => {
+    const sample = createSampleStockItem();
+    mockPrisma.stockItem.findUnique.mockResolvedValue(null);
+    mockPrisma.stockItem.create.mockResolvedValue(sample);
+    mockPrisma.stockMovement.create.mockResolvedValue({});
+
+    await service.createStockItem(prisma(), 'unit_001', {
+      name: 'Chopp Pilsen',
+      sku: 'CHOPP-001',
+      unitType: 'L',
+      quantity: 50,
+      costPrice: 4.5,
+    });
+
+    expect(mockPrisma.stockMovement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'IN',
+          quantity: 50,
+          reason: 'Estoque inicial',
+        }),
+      }),
+    );
+  });
+
+  it('does NOT create IN movement when initial quantity is 0', async () => {
+    const sample = createSampleStockItem({ quantity: { valueOf: () => 0, toNumber: () => 0, toString: () => '0', [Symbol.toPrimitive]: () => 0 } });
+    mockPrisma.stockItem.findUnique.mockResolvedValue(null);
+    mockPrisma.stockItem.create.mockResolvedValue(sample);
+
+    await service.createStockItem(prisma(), 'unit_001', {
+      name: 'Novo Item',
+      unitType: 'UN',
+      quantity: 0,
+    });
+
+    expect(mockPrisma.stockMovement.create).not.toHaveBeenCalled();
   });
 
   it('throws conflict on duplicate SKU in same unit', async () => {
@@ -203,6 +243,7 @@ describe('deactivateStockItem', () => {
   it('sets isActive to false', async () => {
     const item = createSampleStockItem();
     mockPrisma.stockItem.findUnique.mockResolvedValue(item);
+    mockPrisma.productIngredient.count.mockResolvedValue(0); // No recipes
     mockPrisma.stockItem.update.mockResolvedValue({ ...item, isActive: false });
 
     const result = await service.deactivateStockItem(prisma(), 'si_001', 'unit_001');
@@ -211,6 +252,97 @@ describe('deactivateStockItem', () => {
     expect(mockPrisma.stockItem.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: { isActive: false },
+      }),
+    );
+  });
+
+  it('blocks deactivation when item is used in recipes', async () => {
+    const item = createSampleStockItem();
+    mockPrisma.stockItem.findUnique.mockResolvedValue(item);
+    mockPrisma.productIngredient.count.mockResolvedValue(2); // Used in 2 recipes
+
+    await expect(
+      service.deactivateStockItem(prisma(), 'si_001', 'unit_001'),
+    ).rejects.toThrow('Remova o insumo das fichas técnicas antes de desativar');
+  });
+});
+
+// ── Adjustment & Loss Alerts ─────────────────────────────────────────
+
+describe('createMovement alerts', () => {
+  it('creates alert when adjustment diff > 10%', async () => {
+    const item = createSampleStockItem({
+      quantity: { valueOf: () => 100, toNumber: () => 100, toString: () => '100', [Symbol.toPrimitive]: () => 100 },
+    });
+    mockPrisma.stockItem.findUnique.mockResolvedValue(item);
+    mockPrisma.alert.create.mockResolvedValue({});
+
+    const movement = {
+      id: 'mov_adj',
+      stockItemId: 'si_001',
+      type: 'ADJUSTMENT',
+      quantity: { valueOf: () => 20, toNumber: () => 20, toString: () => '20', [Symbol.toPrimitive]: () => 20 },
+      reason: 'Contagem fisica',
+      reference: null,
+      employeeId: 'emp_001',
+      costPrice: null,
+      createdAt: new Date(),
+    };
+    mockPrisma.$transaction.mockResolvedValue([movement]);
+
+    await service.createMovement(prisma(), 'unit_001', {
+      stockItemId: 'si_001',
+      type: 'ADJUSTMENT',
+      quantity: 80, // System: 100, Real: 80 = 20% diff
+      reason: 'Contagem fisica',
+    }, 'emp_001');
+
+    // Should create adjustment alert (20% > 10%)
+    expect(mockPrisma.alert.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          severity: 'WARNING',
+          message: expect.stringContaining('20.0%'),
+        }),
+      }),
+    );
+  });
+
+  it('creates alert when loss value > R$100', async () => {
+    const item = createSampleStockItem({
+      quantity: { valueOf: () => 50, toNumber: () => 50, toString: () => '50', [Symbol.toPrimitive]: () => 50 },
+      costPrice: { valueOf: () => 20, toNumber: () => 20, toString: () => '20', [Symbol.toPrimitive]: () => 20 },
+    });
+    mockPrisma.stockItem.findUnique.mockResolvedValue(item);
+    mockPrisma.alert.create.mockResolvedValue({});
+
+    const movement = {
+      id: 'mov_loss',
+      stockItemId: 'si_001',
+      type: 'LOSS',
+      quantity: { valueOf: () => 10, toNumber: () => 10, toString: () => '10', [Symbol.toPrimitive]: () => 10 },
+      reason: 'Quebra em massa',
+      reference: null,
+      employeeId: 'emp_001',
+      costPrice: null,
+      createdAt: new Date(),
+    };
+    mockPrisma.$transaction.mockResolvedValue([movement]);
+
+    await service.createMovement(prisma(), 'unit_001', {
+      stockItemId: 'si_001',
+      type: 'LOSS',
+      quantity: 10, // 10 * R$20 = R$200 > R$100
+      reason: 'Quebra em massa',
+    }, 'emp_001');
+
+    // Should create high-value loss alert
+    expect(mockPrisma.alert.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          severity: 'WARNING',
+          message: expect.stringContaining('Perda significativa'),
+        }),
       }),
     );
   });

@@ -17,12 +17,20 @@ interface DashboardMovement {
   createdAt: string;
 }
 
+interface TopConsumedItem {
+  name: string;
+  consumed: number;
+  unit: string;
+  cost: number;
+}
+
 interface StockDashboardResponse {
   totalItems: number;
   activeItems: number;
   belowMinCount: number;
   totalValue: number;
   unresolvedAlerts: number;
+  topConsumed: TopConsumedItem[];
   recentMovements: DashboardMovement[];
 }
 
@@ -133,6 +141,30 @@ export function StockDashboard() {
           color={data.unresolvedAlerts > 0 ? 'yellow' : 'green'}
         />
       </div>
+
+      {/* Top Consumed Today */}
+      {data.topConsumed.length > 0 && (
+        <div className="bg-white rounded-xl border p-4">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            Mais Consumidos Hoje
+          </h2>
+          <div className="divide-y">
+            {data.topConsumed.map((item) => (
+              <div key={item.name} className="flex items-center justify-between py-2">
+                <span className="text-sm font-medium text-gray-900">{item.name}</span>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-gray-600">
+                    {item.consumed.toFixed(item.consumed % 1 === 0 ? 0 : 1)} {item.unit}
+                  </span>
+                  <span className="text-gray-500 font-medium">
+                    R$ {item.cost.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
