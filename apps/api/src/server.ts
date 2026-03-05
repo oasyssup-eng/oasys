@@ -8,6 +8,12 @@ import { registerErrorHandler } from './lib/errors';
 import { paymentRoutes } from './modules/payments/payments.routes';
 import { cashRegisterRoutes } from './modules/cash-registers/cash-registers.routes';
 import { menuRoutes } from './modules/menu/menu.routes';
+import { authRoutes } from './modules/auth/auth.routes';
+import { checkRoutes } from './modules/checks/checks.routes';
+import { orderRoutes } from './modules/orders/orders.routes';
+import { tableRoutes } from './modules/tables/tables.routes';
+import { notificationRoutes } from './modules/notifications/notifications.routes';
+import { registerWaiterWs } from './modules/waiter/ws.handler';
 import { registerPaymentExpirationJob } from './modules/payments/payment-expiration.job';
 import { registerSessionCleanup } from './modules/menu/session.service';
 
@@ -32,9 +38,15 @@ server.get('/health', async () => {
 // API v1 routes
 server.register(
   async (app) => {
+    app.register(authRoutes, { prefix: '/auth' });
     app.register(paymentRoutes, { prefix: '/payments' });
     app.register(cashRegisterRoutes, { prefix: '/cash-registers' });
     app.register(menuRoutes, { prefix: '/menu' });
+    app.register(checkRoutes, { prefix: '/checks' });
+    app.register(orderRoutes, { prefix: '/orders' });
+    app.register(tableRoutes, { prefix: '/tables' });
+    app.register(notificationRoutes, { prefix: '/notifications' });
+    app.register(registerWaiterWs);
   },
   { prefix: '/api/v1' },
 );
