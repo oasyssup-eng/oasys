@@ -35,3 +35,10 @@ export {
   createMenuOrderSchema,
   menuPaymentSchema,
 } from './menu.schema';
+
+export {
+  emitFiscalNoteSchema,
+  cancelFiscalNoteSchema,
+  listFiscalNotesQuerySchema,
+  fiscalReportQuerySchema,
+} from './fiscal.schema';

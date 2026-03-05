@@ -722,6 +722,7 @@ model FiscalNote {
   totalAmount Decimal          @db.Decimal(10, 2)
   customerCpf String?
   errorMessage String?
+  retryCount   Int              @default(0)
   issuedAt     DateTime?
   cancelledAt  DateTime?
 
@@ -733,6 +734,7 @@ model FiscalNote {
 
   @@unique([unitId, externalRef])
   @@index([unitId, status])
+  @@index([checkId])
 }
 
 // ============================================================================
