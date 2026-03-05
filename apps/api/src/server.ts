@@ -22,6 +22,9 @@ import { registerHoldReleaseJob } from './modules/kds/hold-release.job';
 import { fiscalRoutes } from './modules/fiscal/fiscal.routes';
 import { registerFiscalRetryJob } from './modules/fiscal/retry.worker';
 import { registerFiscalReconciliationJob } from './modules/fiscal/reconciliation.worker';
+import { closingRoutes } from './modules/closing/closing.routes';
+import { registerAutoCloseReminderJob } from './modules/closing/auto-close-reminder.job';
+import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 
 const config = loadConfig();
 
@@ -54,6 +57,8 @@ server.register(
     app.register(notificationRoutes, { prefix: '/notifications' });
     app.register(kdsRoutes, { prefix: '/kds' });
     app.register(fiscalRoutes, { prefix: '/fiscal' });
+    app.register(closingRoutes, { prefix: '/closing' });
+    app.register(dashboardRoutes, { prefix: '/dashboard' });
     app.register(registerWaiterWs);
     app.register(registerKDSWs);
   },
@@ -68,6 +73,7 @@ const start = async () => {
     registerHoldReleaseJob(server);
     registerFiscalRetryJob(server);
     registerFiscalReconciliationJob(server);
+    registerAutoCloseReminderJob(server);
     await server.listen({ port: config.API_PORT, host: config.API_HOST });
   } catch (err) {
     server.log.error(err);

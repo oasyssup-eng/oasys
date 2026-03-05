@@ -42,3 +42,11 @@ export {
   listFiscalNotesQuerySchema,
   fiscalReportQuerySchema,
 } from './fiscal.schema';
+
+export {
+  executeClosingSchema,
+  reopenClosingSchema,
+  closingHistoryQuerySchema,
+  dashboardTodayQuerySchema,
+  dashboardComparisonQuerySchema,
+} from './closing.schema';
