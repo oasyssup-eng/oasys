@@ -9,6 +9,16 @@ const envSchema = z.object({
   PAGARME_PUBLIC_KEY: z.string().optional(),
   PAGARME_WEBHOOK_SECRET: z.string().optional(),
   PAGARME_BASE_URL: z.string().url().default('https://api.pagar.me/core/v5'),
+
+  // FocusNFe — Fiscal NFC-e (PRD-06)
+  FOCUSNFE_TOKEN: z.string().optional(),
+  FOCUSNFE_BASE_URL: z
+    .string()
+    .url()
+    .default('https://homologacao.focusnfe.com.br'),
+  FOCUSNFE_ENVIRONMENT: z
+    .enum(['homologation', 'production'])
+    .default('homologation'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

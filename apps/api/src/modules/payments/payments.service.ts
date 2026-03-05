@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@oasys/database';
 import { AppError } from '../../lib/errors';
 import { getPagarmeService } from './pagarme.service';
+import { emitNFCeForCheck } from '../fiscal/fiscal.service';
 
 // ── Shared: Validate Check ──────────────────────────────────────────
 async function validateCheck(
@@ -118,6 +119,11 @@ export async function checkPaymentCompletion(
         closedAt: new Date(),
         serviceFeeAmount: serviceFee,
       },
+    });
+
+    // Fire-and-forget: emit NFC-e asynchronously (PRD-06)
+    emitNFCeForCheck(prisma, checkId).catch((err) => {
+      console.error('[fiscal] Auto-emission failed for check', checkId, err);
     });
   }
 

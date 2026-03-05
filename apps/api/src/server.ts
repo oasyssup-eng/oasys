@@ -19,6 +19,9 @@ import { registerSessionCleanup } from './modules/menu/session.service';
 import { kdsRoutes } from './modules/kds/kds.routes';
 import { registerKDSWs } from './modules/kds/ws.handler';
 import { registerHoldReleaseJob } from './modules/kds/hold-release.job';
+import { fiscalRoutes } from './modules/fiscal/fiscal.routes';
+import { registerFiscalRetryJob } from './modules/fiscal/retry.worker';
+import { registerFiscalReconciliationJob } from './modules/fiscal/reconciliation.worker';
 
 const config = loadConfig();
 
@@ -50,6 +53,7 @@ server.register(
     app.register(tableRoutes, { prefix: '/tables' });
     app.register(notificationRoutes, { prefix: '/notifications' });
     app.register(kdsRoutes, { prefix: '/kds' });
+    app.register(fiscalRoutes, { prefix: '/fiscal' });
     app.register(registerWaiterWs);
     app.register(registerKDSWs);
   },
@@ -62,6 +66,8 @@ const start = async () => {
     registerPaymentExpirationJob(server);
     registerSessionCleanup(server);
     registerHoldReleaseJob(server);
+    registerFiscalRetryJob(server);
+    registerFiscalReconciliationJob(server);
     await server.listen({ port: config.API_PORT, host: config.API_HOST });
   } catch (err) {
     server.log.error(err);

@@ -40,6 +40,18 @@ interface ReadyOrder {
   items: Array<{ productName: string; quantity: number }>;
 }
 
+interface StationBreakdown {
+  orderItems: number;
+  totalQuantity: number;
+}
+
+interface TopProduct {
+  productId: string;
+  productName: string;
+  station: string | null;
+  totalQuantity: number;
+}
+
 interface KDSStats {
   period: string;
   overall: {
@@ -52,6 +64,8 @@ interface KDSStats {
     currentQueueLength: number;
     currentHeldOrders: number;
   };
+  byStation: Record<string, StationBreakdown>;
+  topProducts: TopProduct[];
 }
 
 type Station = 'BAR' | 'KITCHEN' | 'GRILL' | 'DESSERT' | 'ALL';

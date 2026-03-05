@@ -30,6 +30,12 @@ function createMockPrisma(): MockPrisma {
       update: vi.fn(),
       count: vi.fn(),
     },
+    orderItem: {
+      groupBy: vi.fn(),
+    },
+    product: {
+      findMany: vi.fn(),
+    },
     unit: {
       findFirst: vi.fn(),
     },
@@ -549,7 +555,7 @@ describe('KDS Service', () => {
   // ── getStats ───────────────────────────────────────────────────────
 
   describe('getStats', () => {
-    it('should return aggregated stats', async () => {
+    it('should return aggregated stats with byStation and topProducts', async () => {
       prisma.order.count
         .mockResolvedValueOnce(50)  // allOrders
         .mockResolvedValueOnce(40)  // completedOrders
@@ -560,6 +566,28 @@ describe('KDS Service', () => {
         .mockResolvedValueOnce(2);  // currentHeld
       prisma.order.findMany.mockResolvedValueOnce([]); // avgPrepTime
 
+      // byStation groupBy
+      prisma.orderItem.groupBy.mockResolvedValueOnce([
+        { productId: 'prod_1', _sum: { quantity: 10 } },
+        { productId: 'prod_2', _sum: { quantity: 5 } },
+      ]);
+      // product lookup for station breakdown
+      prisma.product.findMany.mockResolvedValueOnce([
+        { id: 'prod_1', station: 'BAR', name: 'Caipirinha' },
+        { id: 'prod_2', station: 'KITCHEN', name: 'Picanha' },
+      ]);
+
+      // topProducts groupBy
+      prisma.orderItem.groupBy.mockResolvedValueOnce([
+        { productId: 'prod_1', _sum: { quantity: 10 } },
+        { productId: 'prod_2', _sum: { quantity: 5 } },
+      ]);
+      // product lookup for top products
+      prisma.product.findMany.mockResolvedValueOnce([
+        { id: 'prod_1', name: 'Caipirinha', station: 'BAR' },
+        { id: 'prod_2', name: 'Picanha', station: 'KITCHEN' },
+      ]);
+
       const result = await service.getStats(prisma, UNIT_ID);
 
       expect(result.overall.totalOrders).toBe(50);
@@ -569,6 +597,17 @@ describe('KDS Service', () => {
       expect(result.overall.staffMeals).toBe(1);
       expect(result.overall.currentQueueLength).toBe(5);
       expect(result.overall.currentHeldOrders).toBe(2);
+
+      // byStation
+      expect(result.byStation).toBeDefined();
+      expect(result.byStation.BAR).toEqual({ orderItems: 1, totalQuantity: 10 });
+      expect(result.byStation.KITCHEN).toEqual({ orderItems: 1, totalQuantity: 5 });
+
+      // topProducts
+      expect(result.topProducts).toHaveLength(2);
+      expect(result.topProducts[0]!.productName).toBe('Caipirinha');
+      expect(result.topProducts[0]!.totalQuantity).toBe(10);
+      expect(result.topProducts[1]!.productName).toBe('Picanha');
     });
   });
 });
