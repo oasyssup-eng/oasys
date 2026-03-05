@@ -501,6 +501,13 @@ model Order {
   notifiedAt   DateTime?
   source       String? // WEB_MENU, WHATSAPP, WAITER, POS
 
+  // KDS fields (PRD-05)
+  isCortesia           Boolean @default(false)
+  cortesiaReason       String?
+  cortesiaAuthorizedBy String?
+  staffMealEmployeeId  String?
+  stationCompletions   Json?   // { "BAR": true, "KITCHEN": false }
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

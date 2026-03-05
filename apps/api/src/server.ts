@@ -16,6 +16,9 @@ import { notificationRoutes } from './modules/notifications/notifications.routes
 import { registerWaiterWs } from './modules/waiter/ws.handler';
 import { registerPaymentExpirationJob } from './modules/payments/payment-expiration.job';
 import { registerSessionCleanup } from './modules/menu/session.service';
+import { kdsRoutes } from './modules/kds/kds.routes';
+import { registerKDSWs } from './modules/kds/ws.handler';
+import { registerHoldReleaseJob } from './modules/kds/hold-release.job';
 
 const config = loadConfig();
 
@@ -46,7 +49,9 @@ server.register(
     app.register(orderRoutes, { prefix: '/orders' });
     app.register(tableRoutes, { prefix: '/tables' });
     app.register(notificationRoutes, { prefix: '/notifications' });
+    app.register(kdsRoutes, { prefix: '/kds' });
     app.register(registerWaiterWs);
+    app.register(registerKDSWs);
   },
   { prefix: '/api/v1' },
 );
@@ -56,6 +61,7 @@ const start = async () => {
     await server.ready();
     registerPaymentExpirationJob(server);
     registerSessionCleanup(server);
+    registerHoldReleaseJob(server);
     await server.listen({ port: config.API_PORT, host: config.API_HOST });
   } catch (err) {
     server.log.error(err);

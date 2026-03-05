@@ -13,6 +13,7 @@ import { AppError } from '../../lib/errors';
 import { resolvePricesBatch, resolvePrice } from './price.service';
 import type { SessionData } from './session.service';
 import { publishOrderEvent } from './ws.handler';
+import { publishKDSEvent } from '../kds/ws.handler';
 
 // ── Get Categories ──────────────────────────────────────────────────
 
@@ -417,6 +418,13 @@ export async function createMenuOrder(
       orderNumber,
       timestamp: new Date().toISOString(),
       data: {},
+    });
+
+    // Notify KDS operators about new order
+    publishKDSEvent(unitId, {
+      event: 'order.new',
+      timestamp: new Date().toISOString(),
+      data: { orderId, orderNumber, source: 'WEB_MENU' },
     });
   }
 
