@@ -29,7 +29,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   login: async (pin: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/auth/login', { pin });
+      const unitSlug = import.meta.env.VITE_UNIT_SLUG ?? 'pinheiros';
+      const response = await api.post('/auth/login', { pin, unitSlug });
       const { token, employee } = response.data;
 
       localStorage.setItem('oasys_token', token);

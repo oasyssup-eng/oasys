@@ -22,7 +22,7 @@ export function TableMap() {
     if (!tables) return [];
     const zoneMap = new Map<string, string>();
     for (const t of tables) {
-      zoneMap.set(t.zone.id, t.zone.name);
+      zoneMap.set(t.zoneId, t.zoneName);
     }
     return Array.from(zoneMap, ([id, name]) => ({ id, name }));
   }, [tables]);
@@ -30,7 +30,7 @@ export function TableMap() {
   const filteredTables = useMemo(() => {
     if (!tables) return [];
     if (!activeZone) return tables;
-    return tables.filter((t) => t.zone.id === activeZone);
+    return tables.filter((t) => t.zoneId === activeZone);
   }, [tables, activeZone]);
 
   const handleTableClick = (table: TableStatus) => {

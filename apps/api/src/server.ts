@@ -69,15 +69,16 @@ server.register(
   { prefix: '/api/v1' },
 );
 
+// Background jobs (registered before listen so hooks are still allowed)
+registerPaymentExpirationJob(server);
+registerSessionCleanup(server);
+registerHoldReleaseJob(server);
+registerFiscalRetryJob(server);
+registerFiscalReconciliationJob(server);
+registerAutoCloseReminderJob(server);
+
 const start = async () => {
   try {
-    await server.ready();
-    registerPaymentExpirationJob(server);
-    registerSessionCleanup(server);
-    registerHoldReleaseJob(server);
-    registerFiscalRetryJob(server);
-    registerFiscalReconciliationJob(server);
-    registerAutoCloseReminderJob(server);
     await server.listen({ port: config.API_PORT, host: config.API_HOST });
   } catch (err) {
     server.log.error(err);

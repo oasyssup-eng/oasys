@@ -9,7 +9,8 @@ export interface TableStatus {
   number: number;
   label: string | null;
   seats: number;
-  zone: { id: string; name: string };
+  zoneId: string;
+  zoneName: string;
   color: TableColor;
   isActive: boolean;
   hasServiceRequest: boolean;
