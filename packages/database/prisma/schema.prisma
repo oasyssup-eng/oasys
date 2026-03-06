@@ -25,6 +25,7 @@ enum CheckStatus {
   CLOSED
   PAID
   CANCELLED
+  SPLIT
 }
 
 enum OrderStatus {
@@ -338,6 +339,8 @@ model Table {
   label  String?
   posX   Float?
   posY   Float?
+  isActive          Boolean @default(true)
+  hasServiceRequest Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -348,6 +351,7 @@ model Table {
   checks Check[]
 
   @@unique([unitId, number])
+  @@index([unitId, isActive])
 }
 
 // ============================================================================
@@ -497,6 +501,13 @@ model Order {
   notifiedAt   DateTime?
   source       String? // WEB_MENU, WHATSAPP, WAITER, POS
 
+  // KDS fields (PRD-05)
+  isCortesia           Boolean @default(false)
+  cortesiaReason       String?
+  cortesiaAuthorizedBy String?
+  staffMealEmployeeId  String?
+  stationCompletions   Json?   // { "BAR": true, "KITCHEN": false }
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -517,6 +528,10 @@ model OrderItem {
   totalPrice Decimal @db.Decimal(10, 2)
   notes      String?
   modifiers  Json?   // Selected modifier details
+
+  // Partial delivery tracking (PRD-04)
+  isDelivered Boolean   @default(false)
+  deliveredAt DateTime?
 
   createdAt DateTime @default(now())
 
@@ -707,6 +722,7 @@ model FiscalNote {
   totalAmount Decimal          @db.Decimal(10, 2)
   customerCpf String?
   errorMessage String?
+  retryCount   Int              @default(0)
   issuedAt     DateTime?
   cancelledAt  DateTime?
 
@@ -718,6 +734,7 @@ model FiscalNote {
 
   @@unique([unitId, externalRef])
   @@index([unitId, status])
+  @@index([checkId])
 }
 
 // ============================================================================
@@ -770,6 +787,7 @@ model DailyReport {
   id                String   @id @default(cuid())
   unitId            String
   date              DateTime @db.Date
+  status            String   @default("CLOSED") // CLOSED | REOPENED
   totalRevenue      Decimal? @db.Decimal(10, 2)
   totalOrders       Int?
   totalCancellations Int?
@@ -780,12 +798,29 @@ model DailyReport {
   closedAt          DateTime?
   reopenedAt        DateTime?
   reopenReason      String?
+  reopenCount       Int      @default(0)
+
+  // Financial breakdown (PRD-07)
+  grossRevenue       Decimal? @db.Decimal(10, 2)
+  netRevenue         Decimal? @db.Decimal(10, 2)
+  totalPayments      Decimal? @db.Decimal(10, 2)
+  serviceFees        Decimal? @db.Decimal(10, 2)
+  tips               Decimal? @db.Decimal(10, 2)
+  discounts          Decimal? @db.Decimal(10, 2)
+  cancellationAmount Decimal? @db.Decimal(10, 2)
+  courtesyAmount     Decimal? @db.Decimal(10, 2)
+  staffMealAmount    Decimal? @db.Decimal(10, 2)
+  totalChecks        Int?
+  paidChecks         Int?
+  openChecks         Int?
+  rawData            Json?    // Full immutable snapshot of closing data
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  unit Unit @relation(fields: [unitId], references: [id])
+  unit            Unit            @relation(fields: [unitId], references: [id])
+  hourlyRevenues  HourlyRevenue[]
 
   @@unique([unitId, date])
 }
@@ -809,16 +844,22 @@ model EmployeeStats {
 }
 
 model HourlyRevenue {
-  id         String   @id @default(cuid())
-  unitId     String
-  date       DateTime @db.Date
-  hour       Int      // 0-23
-  revenue    Decimal  @db.Decimal(10, 2) @default(0)
-  orderCount Int      @default(0)
+  id            String   @id @default(cuid())
+  unitId        String
+  dailyReportId String?
+  date          DateTime @db.Date
+  hour          Int      // 0-23
+  revenue       Decimal  @db.Decimal(10, 2) @default(0)
+  orderCount    Int      @default(0)
+  checkCount    Int      @default(0)
 
   createdAt DateTime @default(now())
 
+  // Relations
+  dailyReport DailyReport? @relation(fields: [dailyReportId], references: [id])
+
   @@unique([unitId, date, hour])
+  @@index([dailyReportId])
 }
 
 // ============================================================================

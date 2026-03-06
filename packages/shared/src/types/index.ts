@@ -9,12 +9,15 @@ export type {
   CreateCashPaymentInput,
   CreatePixPaymentInput,
   CreateCardPaymentInput,
+  CreateCardPresentInput,
+  PaymentSummaryDTO,
 } from './payment.dto';
 export type {
   CashRegisterDTO,
   CashRegisterOperationDTO,
   OpenCashRegisterInput,
   CloseCashRegisterInput,
+  CashRegisterReportDTO,
 } from './cash-register.dto';
 export type {
   StockItemDTO,
@@ -26,3 +29,20 @@ export type {
   PriceScheduleDTO,
   CreatePriceScheduleInput,
 } from './price-schedule.dto';
+export type {
+  MenuSessionDTO,
+  MenuUnitDTO,
+  MenuSessionContext,
+  MenuProductDTO,
+  MenuCategoryWithProductsDTO,
+  MenuProductDetailDTO,
+  MenuModifierGroupDTO,
+  MenuModifierDTO,
+  MenuOrderResponseDTO,
+  MenuOrderItemDTO,
+  MenuOrderDetailDTO,
+  MenuSearchResultDTO,
+  MenuCheckSummaryDTO,
+  MenuCheckOrderDTO,
+  MenuCheckPaymentDTO,
+} from './menu.dto';
